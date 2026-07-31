@@ -1,323 +1,185 @@
-// ==================== الاجمالي - نهائي - اصلاح الفعلي صفر ====================
-let activeMonthTab = localStorage.getItem('activeMonthTab') || null;
-let monthCashTotal = 0;
-
 function renderTotal() {
-  let el = document.getElementById('total'); if (!el) return;
-  el.innerHTML = `<div id="total-wrap">
-    <style>
-.glass{background:#fff;border-radius:16px;padding:14px;margin-bottom:12px;border:1px solid #eef2f7;box-shadow:0 4px 12px rgba(0,0,0,.04)}
-.filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.filters input{padding:6px 10px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:10px;font-weight:700}
-.filters button{padding:6px 12px;border:none;border-radius:10px;font-weight:800;font-size:10px;cursor:pointer;color:#fff}
-.month-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
-.month-tab{padding:6px 12px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:800;font-size:10px;cursor:pointer;color:#475569}
-.month-tab.active{background:#0f172a;color:#fff;border-color:#0f172a}
-    table{width:100%;border-collapse:separate;border-spacing:0;font-size:11px;overflow:hidden;border-radius:12px;border:1px solid #e2e8f0}
-    th{background:#0f172a;color:#fff;padding:12px 6px;font-size:10px;text-align:center;font-weight:900}
-    td{padding:10px 6px;text-align:center;border-bottom:1px solid #f1f5f9;font-weight:700;background:#fff}
-.safi{background:#0f172a;color:#fff;border-radius:8px;font-weight:900}
-.profit-input{width:56px;padding:5px;border-radius:8px;border:1.5px solid #cbd5e1;text-align:center;font-weight:900;font-size:11px;background:#1e293b;color:#fff}
-.kpi{flex:1;min-width:120px;padding:10px;border-radius:12px;text-align:center;border:1px solid #e2e8f0}
-    </style>
-
-    <div class="glass">
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <div class="kpi" style="background:#eff6ff"><small style="font-size:9px">مبيعات الشهر كاش تلقائي</small><b id="autoSalesKPI">0</b></div>
-        <div class="kpi" style="background:#f0fdf4"><small style="font-size:9px">نسبة الربح المطلوبة %</small><div style="display:flex;justify-content:center;gap:4px;margin-top:4px"><input id="desiredProfit" type="number" class="profit-input" style="background:#fff;color:#000" oninput="saveProfitConfig()"><span>%</span></div></div>
-        <div class="kpi"><small style="font-size:9px">صافي الربح</small><b id="autoProfitKPI" style="color:#16a34a">0</b></div>
-        <div style="margin-right:auto;font-size:11px;font-weight:900">توزيع الارباح - حسب جدول التصنيف (3)</div>
-      </div>
-      <div id="profitDistTable" style="margin-top:12px"></div>
-    </div>
-
-    <div class="glass">
-      <div class="filters">
-        <input id="totalFrom" placeholder="من تاريخ" onblur="this.value=parseDateSmartTotal(this.value);renderTotalTable()">
-        <input id="totalTo" placeholder="إلى تاريخ" onblur="this.value=parseDateSmartTotal(this.value);renderTotalTable()">
-        <button onclick="clearTotalFilters()" style="background:#64748b">مسح الفلتر</button>
-        <button onclick="fetchSheetData()" style="background:#16a34a">🔄 مزامنة</button>
-        <button onclick="exportTotalExcel()" style="background:#0f172a">📥 Excel</button>
-        <span id="monthSummary" style="margin-right:auto;font-size:9px;background:#f8fafc;padding:6px 10px;border-radius:20px"></span>
-      </div>
-      <div id="monthTabs" class="month-tabs"></div>
-      <div id="totalTableCard" style="margin-top:8px"></div>
-    </div>
-  </div>`;
-  loadProfitConfig();
-  renderTotalTable();
+  try {
+    let db = JSON.parse(localStorage.getItem('dbStore') || '{}');
+    let empList = [...new Set((db.employees || []).map(e => e.name).filter(Boolean))];
+    let supList = [...new Set([...(db.suppliers || []).map(s => s.name || s.c1), ...(db.masrofat || []).map(s => s.c1), ...(db.arba7 || []).map(s => s.c1)].filter(Boolean))];
+    let S = {
+      profit: localStorage.getItem('targetProfit') || '25',
+      rD: localStorage.getItem('ratioDrug') || '65',
+      rC: localStorage.getItem('ratioCosm') || '25',
+      rE: localStorage.getItem('ratioExp') || '10'
+    };
+    let totalEl = document.getElementById('total');
+    if (!totalEl) return;
+    totalEl.innerHTML = '<div id="total-wrap"></div>';
+    let wrap = document.getElementById('total-wrap');
+    wrap.innerHTML =
+      '<style>' +
+      '#total-wrap{font-family:Cairo,sans-serif;background:#f8fafc;padding:14px;border-radius:20px;direction:rtl}' +
+      '.glass{background:#fff;border-radius:14px;padding:12px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.04);border:1px solid #e2e8f0}' +
+      '.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.filters input,.filters select{padding:8px 12px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:11px;font-weight:700;background:#fff;outline:none}.filters button{padding:8px 16px;background:#0f172a;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:11px;cursor:pointer}' +
+      '.hero{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}' +
+      '@media(max-width:1100px){.hero{grid-template-columns:repeat(3,1fr)}}' +
+      '@media(max-width:600px){.hero{grid-template-columns:repeat(2,1fr)}}' +
+      '.h-card{border-radius:14px;padding:10px 12px;height:82px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;text-align:center;border:1.5px solid;transition:.2s;background:#fff;cursor:pointer;position:relative}' +
+      '.h-card:hover{transform:translateY(-3px);box-shadow:0 10px 22px rgba(0,0,0,.1);border-color:#0f172a}' +
+      '.h-card.active{outline:2px solid #0f172a;transform:translateY(-2px)}' +
+      '.h-card label{font-size:10px;font-weight:800;opacity:.8}' +
+      '.h-card b{font-size:16px;font-weight:900;line-height:1}.h-card small{font-size:9px;font-weight:700;opacity:.7}' +
+      '.h-card input{width:56px;padding:5px;border-radius:8px;border:1.5px solid;font-weight:900;text-align:center;font-size:13px;background:#fff}' +
+      '.h-row{display:flex;align-items:center;gap:4px;justify-content:center}' +
+      '.sales{background:linear-gradient(135deg,#fefce8,#fef9c3);border-color:#fde68a;color:#713f12}' +
+      '.profit{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-color:#86efac;color:#14532d}.profit input{border-color:#86efac}' +
+      '.remain{background:linear-gradient(135deg,#eef2ff,#e0e7ff);border-color:#a5b4fc;color:#3730a3}' +
+      '.drug{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-color:#93c5fd;color:#1e3a8a}.drug input{border-color:#93c5fd}' +
+      '.cosm{background:linear-gradient(135deg,#fdf2f8,#fce7f3);border-color:#f9a8d4;color:#831843}.cosm input{border-color:#f9a8d4}' +
+      '.exp{background:linear-gradient(135deg,#fff7ed,#ffedd5);border-color:#fdba74;color:#7c2d12}.exp input{border-color:#fdba74}' +
+      '.budget-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}' +
+      '@media(max-width:900px){.budget-grid{grid-template-columns:1fr 1fr}}' +
+      '.b-card{background:#fff;border-radius:14px;padding:12px;height:95px;display:flex;flex-direction:column;justify-content:space-between;border:1.5px solid #f1f5f9;transition:.2s;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.03)}' +
+      '.b-card:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(0,0,0,.06);border-color:#0f172a}' +
+      '.b-card.active{outline:2px solid #0f172a}' +
+      '.b-top{display:flex;justify-content:space-between;align-items:center;font-size:10px;font-weight:800}' +
+      '.b-val{font-size:14px;font-weight:900}' +
+      '.prog{height:6px;background:#f1f5f9;border-radius:20px;overflow:hidden;margin-top:6px}.prog i{display:block;height:100%;border-radius:20px}' +
+      'table{width:100%;border-collapse:separate;border-spacing:0;font-size:11px}th{background:#f8fafc;padding:10px 8px;font-size:10px;color:#475569;border-bottom:1.5px solid #e2e8f0;text-align:center;font-weight:800}td{padding:9px 8px;text-align:center;border-bottom:1px solid #f1f5f9}td.r{text-align:right;font-weight:700}' +
+      '.badge{padding:4px 10px;border-radius:20px;font-size:9px;font-weight:800}' +
+      '.detail-box{animation:slideDown.25s ease}' +
+      '@keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}' +
+      '</style>' +
+      '<div class="glass"><div class="filters">' +
+      '<input id="totalFrom" placeholder="من تاريخ" onblur="this.value=parseDateSmartTotal(this.value);renderTotalTable()">' +
+      '<input id="totalTo" placeholder="إلى تاريخ" onblur="this.value=parseDateSmartTotal(this.value);renderTotalTable()">' +
+      '<select id="totalEmp" onchange="renderTotalTable()"><option value="">كل الموظفين</option>' + empList.map(n => '<option value="' + n + '">' + n + '</option>').join('') + '</select>' +
+      '<select id="totalSup" onchange="renderTotalTable()"><option value="">كل الموردين</option>' + supList.map(n => '<option value="' + n + '">' + n + '</option>').join('') + '</select>' +
+      '<button onclick="clearTotalFilters()">مسح الفلتر</button>' +
+      '</div></div>' +
+      '<div class="hero">' +
+      '<div class="h-card sales" onclick="showDetail(\'sales\')"><label>💰 المبيعات</label><b id="salesPreview">--</b><small>اضغط للتفاصيل</small></div>' +
+      '<div class="h-card profit" onclick="showDetail(\'profit\')"><label>🎯 % الربح</label><div class="h-row"><input id="targetProfit" type="number" value="' + S.profit + '" oninput="saveTargets()" onclick="event.stopPropagation()"></div><small id="profitAmt">--</small></div>' +
+      '<div class="h-card remain" onclick="showDetail(\'remain\')"><label>📦 المتبقي</label><b id="remainPreview">--</b><small id="remainAmt">--</small></div>' +
+      '<div class="h-card drug" onclick="showDetail(\'drug\')"><label>💊 دواء</label><div class="h-row"><input id="ratioDrug" type="number" value="' + S.rD + '" oninput="saveTargets()" onclick="event.stopPropagation()"><span style="font-size:10px;font-weight:900">%</span></div><b id="drugFinalP" style="font-size:11px">--</b><small id="drugAmt">--</small></div>' +
+      '<div class="h-card cosm" onclick="showDetail(\'cosm\')"><label>💖 كوزمتكس</label><div class="h-row"><input id="ratioCosm" type="number" value="' + S.rC + '" oninput="saveTargets()" onclick="event.stopPropagation()"><span style="font-size:10px;font-weight:900">%</span></div><b id="cosmFinalP" style="font-size:11px">--</b><small id="cosmAmt">--</small></div>' +
+      '<div class="h-card exp" onclick="showDetail(\'exp\')"><label>💸 مصروفات</label><div class="h-row"><input id="ratioExp" type="number" value="' + S.rE + '" oninput="saveTargets()" onclick="event.stopPropagation()"><span style="font-size:10px;font-weight:900">%</span></div><b id="expFinalP" style="font-size:11px">--</b><small id="expAmt">--</small></div>' +
+      '</div>' +
+      '<div id="detailBox"></div>' +
+      '<div id="budgetCalc"></div><div id="kpiArea" style="margin-top:12px"></div><div id="alertArea"></div><div id="mainTables" style="margin-top:12px"></div><div id="totalTableCard" style="margin-top:12px"></div>';
+    renderTotalTable();
+  } catch (err) { console.error(err); }
 }
 
-function parseDateSmartTotal(v){ if(!v) return ''; v=v.trim().replace(/-/g,'/'); let p=v.split('/'); let y=new Date().getFullYear(); if(p.length==2) return p[0]+'/'+p[1]+'/'+y; if(p.length==3){ if(p[2].length==2) p[2]='20'+p[2]; return p.join('/'); } return v; }
-function parseDateForFilterTotal(s){ if(!s) return null; let p=s.split('/'); if(p.length!==3) return null; return new Date(p[2],p[1]-1,p[0]); }
-function calcNumTotal(v){
-  try{
-    if(!v) return 0;
-    let s=(v+'').toString().trim().replace(/,/g,'');
-    // يتعامل مع 5280- اللي عندك في الصورة
-    let isNeg=s.endsWith('-'); if(isNeg) s='-'+s.slice(0,-1);
-    s=s.replace(/[^0-9.\-+*\/]/g,'');
-    if(!s) return 0;
-    if(/[\+\-\*\/]/.test(s.slice(1))) return Function('"use strict";return ('+s+')')();
-    return parseFloat(s)||0;
-  }catch{ return 0; }
-}
-function isNumericVal(v){ if(!v) return false; let s=v.toString().trim(); return /^-?[0-9,.\-]+\-?$/.test(s) && s.replace(/[^0-9]/g,'').length>0; }
-function clearTotalFilters(){ let a=document.getElementById('totalFrom'), b=document.getElementById('totalTo'); if(a) a.value=''; if(b) b.value=''; renderTotalTable(); }
-function exportTotalExcel(){ let html=document.getElementById('totalTableCard').innerHTML; let blob=new Blob(['\uFEFF'+html],{type:'application/vnd.ms-excel'}); let url=URL.createObjectURL(blob); let a=document.createElement('a'); a.href=url; a.download='الاجمالي_'+(activeMonthTab||'')+'.xls'; a.click(); }
+let lastDetailData = {};
+function showDetail(type) {
+  document.querySelectorAll('.h-card,.b-card').forEach(c => c.classList.remove('active'));
+  if (event && event.currentTarget) event.currentTarget.classList.add('active');
+  let box = document.getElementById('detailBox');
+  if (!box) return;
+  let d = lastDetailData;
+  if (!d || !d.totalSales) { box.innerHTML = ''; return; }
 
-function getSupplierClassifications(){
-  let cats=new Set();
-  let keys=[];
-  for(let i=0;i<localStorage.length;i++){
-    let k=localStorage.key(i); if(!k) continue;
-    let low=k.toLowerCase();
-    if(low.includes('tasn') || low.includes('class') || low.includes('categ') || low.includes('تصنيف')) keys.push(k);
+  let html = '';
+  if (type === 'sales') {
+    html = `<div class="glass detail-box" style="border-color:#fde68a;background:#fffbeb"><b style="font-size:12px">💰 تفصيل المبيعات - جاي من اليومية (شيفت + انستا + فودافون)</b><div style="max-height:300px;overflow:auto;margin-top:10px"><table><thead><tr><th>التاريخ</th><th>كاش شيفت</th><th>انستا</th><th>فودافون</th><th>الإجمالي</th></tr></thead><tbody>${(d.salesDetail || []).map(r => `<tr><td style="font-weight:900">${r.date}</td><td>${r.cash.toLocaleString()}</td><td>${r.insta.toLocaleString()}</td><td>${r.voda.toLocaleString()}</td><td style="font-weight:900;background:#fef3c7;border-radius:8px">${r.total.toLocaleString()}</td></tr>`).join('')}</tbody><tfoot><tr style="background:#422006;color:#fef08a;font-weight:900"><td>الإجمالي</td><td>${d.cashTotal.toLocaleString()}</td><td>${d.instaTotal.toLocaleString()}</td><td>${d.vodaTotal.toLocaleString()}</td><td>${d.totalSales.toLocaleString()} ج</td></tr></tfoot></table></div></div>`;
+  } else if (type === 'profit') {
+    html = `<div class="glass detail-box" style="border-color:#86efac;background:#f0fdf4"><b>🎯 الربح - الحساب</b><div style="margin-top:10px;font-size:12px;line-height:2"><div>إجمالي المبيعات = <b>${d.totalSales.toLocaleString()} ج</b> (من كل أيام اليومية)</div><div>نسبة الربح اللي انت محددها = <b>${d.p}%</b></div><div>قيمة الربح = ${d.totalSales.toLocaleString()} × ${d.p}% = <b style="color:#16a34a">${d.profitAmt.toLocaleString()} ج</b></div><div>المتبقي للتشغيل = 100% - ${d.p}% = <b>${d.remain}% = ${d.remainAmt.toLocaleString()} ج</b></div></div></div>`;
+  } else if (type === 'remain') {
+    html = `<div class="glass detail-box" style="border-color:#a5b4fc;background:#eef2ff"><b>📦 المتبقي - توزيعه</b><div style="margin-top:10px;font-size:11px">المتبقي ${d.remain}% بيتوزع على (دواء + كوزمتكس + مصروفات) حسب النسب اللي فوق<br><br><table><tr><th>البند</th><th>نسبتك</th><th>النسبة الفعلية من الإجمالي</th><th>القيمة</th></tr><tr><td>دواء</td><td>${d.rD}%</td><td>${d.fD.toFixed(1)}%</td><td>${d.dAmt.toLocaleString()} ج</td></tr><tr><td>كوزمتكس</td><td>${d.rC}%</td><td>${d.fC.toFixed(1)}%</td><td>${d.cAmt.toLocaleString()} ج</td></tr><tr><td>مصروفات</td><td>${d.rE}%</td><td>${d.fE.toFixed(1)}%</td><td>${d.eAmt.toLocaleString()} ج</td></tr></table></div></div>`;
+  } else if (type === 'drug') {
+    html = `<div class="glass detail-box" style="border-color:#93c5fd;background:#eff6ff"><b>💊 تفصيل الدواء - جاي من الموردين اللي نوعهم مخزن أدوية</b><div style="max-height:300px;overflow:auto;margin-top:10px"><table><thead><tr><th>المورد</th><th>التاريخ</th><th>القيمة</th><th>من إجمالي الدواء</th></tr></thead><tbody>${(d.drugDetail || []).map(r => `<tr><td class="r">${r.name}</td><td>${r.date}</td><td style="font-weight:800">${r.val.toLocaleString()}</td><td>${(r.val / d.dAmt * 100).toFixed(1)}%</td></tr>`).join('')}</tbody><tfoot><tr style="background:#1e3a8a;color:#fff;font-weight:900"><td>الإجمالي الفعلي</td><td></td><td>${d.purDrug.toLocaleString()} ج</td><td>الميزانية ${d.dAmt.toLocaleString()} ج</td></tr></tfoot></table></div><div style="margin-top:8px;font-size:11px">المصدر: كل إدخالات <b>المورد</b> في اليومية اللي متسجل في قواعد البيانات نوعه مخزن/دواء</div></div>`;
+  } else if (type === 'cosm') {
+    html = `<div class="glass detail-box" style="border-color:#f9a8d4;background:#fdf2f8"><b>💖 تفصيل الكوزمتكس (ليفر + الحافظ + أي كوزمتكس) - جاي من الموردين</b><div style="max-height:300px;overflow:auto;margin-top:10px"><table><thead><tr><th>المورد</th><th>التاريخ</th><th>القيمة</th></tr></thead><tbody>${(d.cosmDetail || []).map(r => `<tr><td class="r">${r.name}</td><td>${r.date}</td><td style="font-weight:800">${r.val.toLocaleString()}</td></tr>`).join('')}</tbody><tfoot><tr style="background:#831843;color:#fff;font-weight:900"><td>الإجمالي</td><td></td><td>${d.purCosm.toLocaleString()} ج / الميزانية ${d.cAmt.toLocaleString()} ج</td></tr></tfoot></table></div></div>`;
+  } else if (type === 'exp') {
+    html = `<div class="glass detail-box" style="border-color:#fdba74;background:#fff7ed"><b>💸 تفصيل المصروفات - جاي من خانة المصروفات والموردين اللي نوعهم مصروفات</b><div style="max-height:300px;overflow:auto;margin-top:10px"><table><thead><tr><th>البند</th><th>التاريخ</th><th>القيمة</th></tr></thead><tbody>${(d.expDetail || []).map(r => `<tr><td class="r">${r.name}</td><td>${r.date}</td><td style="font-weight:800">${r.val.toLocaleString()}</td></tr>`).join('')}</tbody><tfoot><tr style="background:#7c2d12;color:#fff;font-weight:900"><td>الإجمالي</td><td></td><td>${d.purExp.toLocaleString()} ج / الميزانية ${d.eAmt.toLocaleString()} ج</td></tr></tfoot></table></div></div>`;
   }
-  keys.forEach(k=>{
-    try{
-      let data=JSON.parse(localStorage.getItem(k)||'[]');
-      let arr=Array.isArray(data)?data:(data.data||data.list||Object.values(data));
-      if(!Array.isArray(arr)) return;
-      arr.forEach(o=>{
-        if(!o||typeof o!=='object') return;
-        let name=o.الاسم||o.name||o.title;
-        if(name && typeof name==='string'){
-          let n=name.trim();
-          if(n && n!=='المجموعة' && n.length>=2 && n.length<=20) cats.add(n);
-        }
+  box.innerHTML = html;
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function saveTargets() { try { localStorage.setItem('targetProfit', document.getElementById('targetProfit').value); localStorage.setItem('ratioDrug', document.getElementById('ratioDrug').value); localStorage.setItem('ratioCosm', document.getElementById('ratioCosm').value); localStorage.setItem('ratioExp', document.getElementById('ratioExp').value); } catch { } renderTotalTable(); }
+function clearTotalFilters() { let a = document.getElementById('totalFrom'), b = document.getElementById('totalTo'), c = document.getElementById('totalEmp'), d = document.getElementById('totalSup'); if (a) a.value = ''; if (b) b.value = ''; if (c) c.value = ''; if (d) d.value = ''; renderTotalTable(); document.getElementById('detailBox').innerHTML = ''; }
+function parseDateSmartTotal(v) { if (!v) return ''; v = v.trim().replace(/-/g, '/'); let p = v.split('/'); let y = new Date().getFullYear(); if (p.length == 2) return p[0] + '/' + p[1] + '/' + y; if (p.length == 3) { if (p[2].length == 2) p[2] = '20' + p[2]; return p.join('/'); } return v; }
+function parseDateForFilterTotal(s) { if (!s) return null; let p = s.split('/'); if (p.length !== 3) return null; return new Date(p[2], p[1] - 1, p[0]); }
+function calcNumTotal(v) { try { if (!v) return 0; let e = (v + '').toString().replace(/,/g, '').trim(); if (e.indexOf('+') > -1 || e.indexOf('-') > -1 || e.indexOf('*') > -1 || e.indexOf('/') > -1) { return Function('"use strict";return (' + e + ')')(); } return parseFloat(e) || 0; } catch { return 0; } }
+function getSupplierTypeMap() { try { let db = JSON.parse(localStorage.getItem('dbStore') || '{}'), map = {}; (db.suppliers || []).forEach(function (s) { let name = (s.name || s.c1 || '').toString().trim(); if (!name) return; let all = Object.values(s).join(' ').toLowerCase(); let type = 'اخرى'; if (all.indexOf('كوزمتك') > -1 || all.indexOf('تجميل') > -1 || all.indexOf('ليفر') > -1 || all.indexOf('حافظ') > -1 || all.indexOf('cosm') > -1) type = 'كوزمتكس'; else if (all.indexOf('مخزن') > -1 || all.indexOf('ادويه') > -1 || all.indexOf('ادوية') > -1 || all.indexOf('دواء') > -1 || all.indexOf('بدر') > -1 || all.indexOf('متحدة') > -1) type = 'مخزن ادوية'; else if (all.indexOf('مصروف') > -1 || all.indexOf('ايجار') > -1) type = 'مصروفات'; map[name] = { type: type }; map[name.toLowerCase()] = { type: type }; }); (db.masrofat || []).forEach(function (m) { let n = (m.c1 || '').toString().trim(); if (n) { map[n] = { type: 'مصروفات' }; map[n.toLowerCase()] = { type: 'مصروفات' }; } }); return map; } catch { return {}; } }
+function getDBMaps() { try { let db = JSON.parse(localStorage.getItem('dbStore') || '{}'); return { sup: new Set((db.suppliers || []).map(function (s) { return (s.name || s.c1 || '').toString().trim().toLowerCase(); }).filter(Boolean)), mas: new Set((db.masrofat || []).map(function (s) { return (s.c1 || '').toString().trim().toLowerCase(); }).filter(Boolean)), arb: new Set((db.arba7 || []).map(function (s) { return (s.c1 || '').toString().trim().toLowerCase(); }).filter(Boolean)), supTypeMap: getSupplierTypeMap() }; } catch { return { sup: new Set(), mas: new Set(), arb: new Set(), supTypeMap: {} } } }
+
+function renderTotalTable() {
+  try {
+    let dailyStore = JSON.parse(localStorage.getItem('dailyStore') || '{}');
+    let maps = getDBMaps(); let mas = maps.mas, supTypeMap = maps.supTypeMap;
+    let fromV = document.getElementById('totalFrom') ? document.getElementById('totalFrom').value : '';
+    let toV = document.getElementById('totalTo') ? document.getElementById('totalTo').value : '';
+    let empF = document.getElementById('totalEmp') ? document.getElementById('totalEmp').value : '';
+    let fromD = parseDateForFilterTotal(fromV), toD = parseDateForFilterTotal(toV);
+    let p = parseFloat(document.getElementById('targetProfit') ? document.getElementById('targetProfit').value : 25);
+    let rD = parseFloat(document.getElementById('ratioDrug') ? document.getElementById('ratioDrug').value : 65);
+    let rC = parseFloat(document.getElementById('ratioCosm') ? document.getElementById('ratioCosm').value : 25);
+    let rE = parseFloat(document.getElementById('ratioExp') ? document.getElementById('ratioExp').value : 10);
+    let sumR = rD + rC + rE || 100, remain = 100 - p, fD = remain * rD / sumR, fC = remain * rC / sumR, fE = remain * rE / sumR;
+    let rows = '', sumShift = 0, sumMawrid = 0, sumMasrof = 0, sumInsta = 0, sumVoda = 0, sumSafi = 0, purDrug = 0, purCosm = 0, purExp = 0, purDetail = {}, empSales = {};
+    let salesDetail = [], drugDetail = [], cosmDetail = [], expDetail = [];
+    let cashTotal = 0, instaTotal = 0, vodaTotal = 0;
+
+    Object.keys(dailyStore).sort(function (a, b) { let da = parseDateForFilterTotal(a), db = parseDateForFilterTotal(b); return (da - db) || 0; }).forEach(function (dateKey) {
+      let d = parseDateForFilterTotal(dateKey); if (fromD && d && d < fromD) return; if (toD && d && d > toD) return;
+      let data = dailyStore[dateKey]; if (!Array.isArray(data)) return;
+      let map = {}, insta = 0, voda = 0;
+      data.forEach(function (it) {
+        if (!it || !it.id) return;
+        if (it.id.startsWith('t1_')) { let m = it.id.match(/t1_r(\d+)_c(\d+)/); if (!m) return; let r = m[1], c = m[2]; if (!map[r]) map[r] = { emp: '', name: '', val: 0, shift: 0, diff: 0 }; if (c === '1') map[r].emp = (it.val || '').trim(); if (c === '2') map[r].shift = calcNumTotal(it.val); if (c === '3') map[r].diff = calcNumTotal(it.val); if (c === '5') map[r].name = (it.val || '').trim(); if (c === '6') map[r].val = calcNumTotal(it.val); }
+        if (it.id.indexOf('insta_') > -1 && it.id.indexOf('_c2') > -1) insta += calcNumTotal(it.val);
+        if (it.id.indexOf('voda_') > -1 && it.id.indexOf('_c2') > -1) voda += calcNumTotal(it.val);
       });
-    }catch(e){}
-  });
-  try{
-    let daily=JSON.parse(localStorage.getItem('dailyStore')||'{}');
-    Object.values(daily).forEach(arr=>{
-      if(!Array.isArray(arr)) return;
-      arr.forEach(it=>{ if(it.id&&it.id.includes('_c4')&&it.val){ let v=it.val.trim(); if(v&&v!=='المجموعة'&&v.length>=2&&v.length<=20&&!isNumericVal(v)) cats.add(v); } });
+      let filtered = Object.values(map); if (empF) filtered = filtered.filter(function (r) { return r.emp === empF; });
+      let shift = 0, diff = 0; filtered.forEach(function (r) { shift += r.shift; diff += r.diff; });
+      filtered.forEach(function (r) { if (!r.emp) return; if (!empSales[r.emp]) empSales[r.emp] = { shift: 0, diff: 0, days: {} }; empSales[r.emp].shift += r.shift; empSales[r.emp].diff += r.diff; empSales[r.emp].days[dateKey] = 1; });
+      let mawrid = 0, masrof = 0;
+      filtered.forEach(function (r) {
+        if (!r.name || !r.val) return;
+        let info = supTypeMap[r.name] || supTypeMap[r.name.toLowerCase().trim()];
+        let t = info ? info.type : 'اخرى'; if (mas.has(r.name.toLowerCase().trim())) t = 'مصروفات';
+        if (t === 'مخزن ادوية') { purDrug += r.val; drugDetail.push({ name: r.name, date: dateKey, val: r.val }); }
+        else if (t === 'كوزمتكس') { purCosm += r.val; cosmDetail.push({ name: r.name, date: dateKey, val: r.val }); }
+        else if (t === 'مصروفات') { purExp += r.val; expDetail.push({ name: r.name, date: dateKey, val: r.val }); }
+        if (!purDetail[r.name]) purDetail[r.name] = { val: 0, type: t, count: 0 }; purDetail[r.name].val += r.val; purDetail[r.name].count++; purDetail[r.name].type = t;
+        if (t === 'مصروفات') masrof += r.val; else mawrid += r.val;
+      });
+      if (shift === 0 && mawrid === 0 && masrof === 0 && insta === 0 && voda === 0) return;
+      let cash = Math.max(0, shift - (insta + voda));
+      salesDetail.push({ date: dateKey, cash: cash, insta: insta, voda: voda, total: cash + insta + voda });
+      cashTotal += cash; instaTotal += insta; vodaTotal += voda;
+      let rowSafi = shift + diff - mawrid - masrof + insta + voda;
+      sumShift += shift; sumMawrid += mawrid; sumMasrof += masrof; sumInsta += insta; sumVoda += voda; sumSafi += rowSafi;
+      rows += '<tr><td style="font-weight:900">' + dateKey + '</td><td>' + shift.toLocaleString() + '</td><td>' + mawrid.toLocaleString() + '</td><td>' + masrof.toLocaleString() + '</td><td>' + insta.toLocaleString() + '</td><td>' + voda.toLocaleString() + '</td><td style="background:#0f172a;color:#fff;border-radius:8px;font-weight:900">' + rowSafi.toLocaleString() + '</td></tr>';
     });
-  }catch(e){}
-  if(cats.size===0) ['دواء','كوزمتكس','مصاريف'].forEach(c=>cats.add(c));
-  cats.delete('المجموعة');
-  return [...cats];
-}
+    let totalSales = cashTotal + instaTotal + vodaTotal || 1;
+    let profitAmt = totalSales * p / 100, remainAmt = totalSales * remain / 100, dAmt = totalSales * fD / 100, cAmt = totalSales * fC / 100, eAmt = totalSales * fE / 100;
 
-function loadProfitConfig(){
-  let cfg=JSON.parse(localStorage.getItem('profitConfigTotal')||'{"desired":10,"dist":{"دواء":40,"كوزمتكس":30,"مصاريف":30}}');
-  setTimeout(()=>{ let inp=document.getElementById('desiredProfit'); if(inp) inp.value=cfg.desired||10; },20);
-  let cats=getSupplierClassifications();
-  let dist=cfg.dist||{};
-  let sales=monthCashTotal||0;
-  let desired=cfg.desired||10;
-  let remainingPerc=100-desired;
-  let remainingValue=sales*remainingPerc/100;
+    lastDetailData = { totalSales, profitAmt, remainAmt, dAmt, cAmt, eAmt, purDrug, purCosm, purExp, p, rD, rC, rE, fD, fC, fE, remain, cashTotal, instaTotal, vodaTotal, salesDetail, drugDetail, cosmDetail, expDetail };
 
-  if(document.getElementById('autoSalesKPI')) document.getElementById('autoSalesKPI').textContent=sales.toLocaleString();
-  if(document.getElementById('autoProfitKPI')) document.getElementById('autoProfitKPI').textContent=(sales*desired/100).toLocaleString();
+    document.getElementById('salesPreview').textContent = totalSales.toLocaleString() + ' ج';
+    document.getElementById('remainPreview').textContent = remain.toFixed(0) + '%';
+    document.getElementById('remainAmt').textContent = remainAmt.toLocaleString() + ' ج';
+    document.getElementById('profitAmt').textContent = profitAmt.toLocaleString() + ' ج';
+    document.getElementById('drugFinalP').textContent = fD.toFixed(1) + '%';
+    document.getElementById('drugAmt').textContent = dAmt.toLocaleString() + ' ج';
+    document.getElementById('cosmFinalP').textContent = fC.toFixed(1) + '%';
+    document.getElementById('cosmAmt').textContent = cAmt.toLocaleString() + ' ج';
+    document.getElementById('expFinalP').textContent = fE.toFixed(1) + '%';
+    document.getElementById('expAmt').textContent = eAmt.toLocaleString() + ' ج';
 
-  let html=`
-  <div style="overflow:auto;border-radius:12px">
-  <table>
-    <thead>
-      <tr>
-        <th style="width:100px">البند</th>
-        ${cats.map(c=>`<th>${c}<div style="margin-top:6px"><input data-cat="${c}" value="${dist[c]||0}" oninput="saveProfitConfig()" class="profit-input"> %</div></th>`).join('')}
-        <th style="background:#1e40af">الاجمالي</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr style="background:#f0f9ff">
-        <td style="background:#eff6ff;font-weight:900;color:#1e40af">المفروض كده</td>
-        ${cats.map(c=>{ let p=dist[c]||0; let val=remainingValue*p/100; return `<td data-val="${c}" style="background:#eff6ff"><div style="font-weight:900">${val.toLocaleString()}</div><div style="font-size:8px;color:#64748b">${p}% من المتبقي</div></td>`; }).join('')}
-        <td style="background:#dbeafe;font-weight:900">${remainingValue.toLocaleString()}</td>
-      </tr>
-      <tr>
-        <td style="background:#fef9c3;font-weight:900">الفعلي بقا</td>
-        ${cats.map(c=>`<td data-actual="${c}" style="background:#fffbeb;font-weight:900">0</td>`).join('')}
-        <td data-actual="totalCat" style="background:#fef3c7;font-weight:900">0</td>
-      </tr>
-      <tr>
-        <td style="background:#fee2e2;font-weight:900;color:#991b1b">الفرق (المشاكل)</td>
-        ${cats.map(c=>`<td data-diff="${c}" style="font-weight:900">-</td>`).join('')}
-        <td data-diff="totalCat">-</td>
-      </tr>
-    </tbody>
-  </table>
-  </div>
-  <div id="distSum" style="text-align:center;margin-top:8px;font-size:10px"></div>`;
-  document.getElementById('profitDistTable').innerHTML=html;
-  calcPreview();
-}
-
-function saveProfitConfig(){
-  let desired=calcNumTotal(document.getElementById('desiredProfit')?.value||10);
-  let dist={};
-  document.querySelectorAll('input[data-cat]').forEach(inp=>{ dist[inp.dataset.cat]=calcNumTotal(inp.value); });
-  localStorage.setItem('profitConfigTotal', JSON.stringify({desired, dist}));
-  loadProfitConfig();
-}
-
-function calcPreview(){
-  try{
-    let cfg=JSON.parse(localStorage.getItem('profitConfigTotal')||'{}');
-    let sum=Object.values(cfg.dist||{}).reduce((a,b)=>a+b,0);
-    let el=document.getElementById('distSum');
-    if(el) el.innerHTML=`مجموع التوزيع: <span style="padding:3px 10px;border-radius:20px;background:${sum===100?'#dcfce7':'#fee2e2'}">${sum}% ${sum===100?'✓':'لازم 100%'}</span>`;
-  }catch(e){}
-}
-
-function goToDaily(dateKey){ localStorage.setItem('jumpToDate', dateKey); if(typeof showTab==='function') showTab('daily'); }
-function goToSupplier(supName){ if(!supName||supName=='-') return; localStorage.setItem('supplierFilter', supName); if(typeof showTab==='function') showTab('qawaed'); }
-
-function renderTotalTable(){
-  try{
-    let dailyStore=JSON.parse(localStorage.getItem('dailyStore')||'{}');
-    let fromV=document.getElementById('totalFrom')?.value||'', toV=document.getElementById('totalTo')?.value||'';
-    let fromD=parseDateForFilterTotal(fromV), toD=parseDateForFilterTotal(toV);
-    const monthNames=['يناير','فبراير','مارس','ابريل','مايو','يونيو','يوليو','اغسطس','سبتمبر','اكتوبر','نوفمبر','ديسمبر'];
-    let months={};
-    Object.keys(dailyStore).sort((a,b)=> parseDateForFilterTotal(b)-parseDateForFilterTotal(a)).forEach(dateKey=>{
-      let d=parseDateForFilterTotal(dateKey); if(!d) return;
-      if(fromD && d<fromD) return; if(toD && d>toD) return;
-      let monthKey=`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
-      if(!months[monthKey]) months[monthKey]={days:[],monthNum:d.getMonth(),year:d.getFullYear()};
-      let data=dailyStore[dateKey]; if(!Array.isArray(data)) return;
-
-      // تجميع الصفوف بطريقة ذكية تتعامل مع ترتيب الاعمدة المختلف
-      let rowsMap={};
-      data.forEach(it=>{
-        if(!it||!it.id) return;
-        let m=it.id.match(/t1_r(\d+)_c(\d+)/); if(!m) return;
-        let r=m[1], c=m[2];
-        if(!rowsMap[r]) rowsMap[r]={c1:'',c2:'',c3:'',c4:'',c5:'',c6:'',insta:0,voda:0};
-        rowsMap[r]['c'+c]=it.val||'';
-      });
-      let empRows=[];
-      Object.values(rowsMap).forEach(rr=>{
-        let shift=calcNumTotal(rr.c2);
-        let diff=calcNumTotal(rr.c3);
-        // نكتشف التصنيف والقيمة واسم المورد بذكاء
-        let candidates=[rr.c4,rr.c5,rr.c6];
-        let cat='', val=0, sup='';
-        candidates.forEach(v=>{
-          if(!v) return;
-          let t=v.toString().trim();
-          if(!t) return;
-          // لو نص وموجود في جدول التصنيف -> ده التصنيف
-          let knownCats=getSupplierClassifications();
-          if(knownCats.includes(t) || (!isNumericVal(t) && t.length<=20 &&!t.includes('-') )){
-            // لو مش رقم يبقى ممكن تصنيف او مورد
-            if(knownCats.includes(t) || ['دواء','كوزمتكس','مصاريف','عام','مخزن دواء','شركة دواء'].some(k=>t.includes(k))){
-              cat=t;
-            } else if(!cat &&!isNumericVal(t)){
-              // لو مش تصنيف معروف يبقى اسم مورد
-              if(t.length>2 &&!/^[0-9]+$/.test(t)) sup=t;
-            }
-          }
-          if(isNumericVal(t)){
-            let num=calcNumTotal(t);
-            if(Math.abs(num)>0){
-              // اكبر رقم في الصف غالبا هو قيمة المورد او الشيفت، لكن الشيفت في c2
-              // هنا نعتبر اي رقم في c4,c5,c6 هو قيمة المورد لو c2 موجود
-              if(!val || Math.abs(num)>Math.abs(val)) val=num;
-            }
-          }
-        });
-        // لو لسه مالقيناش قيمة، جرب c4,c5,c6
-        if(val===0){
-          [rr.c4,rr.c5,rr.c6].forEach(v=>{ let n=calcNumTotal(v); if(n!==0) val=n; });
-        }
-        // لو التصنيف لسه فاضي، خده من c4 لو مش رقم
-        if(!cat){
-          [rr.c4,rr.c5,rr.c6].forEach(v=>{
-            if(v &&!isNumericVal(v) && v.trim().length>=2) cat=v.trim();
-          });
-        }
-        if(rr.c1 || shift!==0 || val!==0){
-          empRows.push({emp:rr.c1, shift, diff, cat, sup, val, insta:0, voda:0});
-        }
-      });
-
-      let instaSum=0, vodaSum=0;
-      data.forEach(it=>{
-        if(it.id&&it.id.includes('insta_')) instaSum+=calcNumTotal(it.val);
-        if(it.id&&it.id.includes('voda_')) vodaSum+=calcNumTotal(it.val);
-      });
-
-      months[monthKey].days.push({dateKey, empRows, instaSum, vodaSum});
-    });
-
-    let monthKeys=Object.keys(months).sort((a,b)=> b.localeCompare(a));
-    if(!activeMonthTab ||!months[activeMonthTab]){ activeMonthTab=monthKeys[0]||null; if(activeMonthTab) localStorage.setItem('activeMonthTab',activeMonthTab); }
-
-    document.getElementById('monthTabs').innerHTML=monthKeys.map(m=>{
-      let isActive=m===activeMonthTab?'active':'';
-      return `<div class="month-tab ${isActive}" onclick="activeMonthTab='${m}';localStorage.setItem('activeMonthTab','${m}');renderTotalTable()">${monthNames[months[m].monthNum]}</div>`;
-    }).join('') || '<div style="font-size:10px">مفيش بيانات</div>';
-
-    let rows=''; monthCashTotal=0; let totalCatActual={}; let totalInsta=0, totalVoda=0;
-    let activeData=months[activeMonthTab]?.days||[];
-    activeData.forEach(({dateKey, empRows, instaSum, vodaSum})=>{
-      totalInsta+=instaSum; totalVoda+=vodaSum;
-      empRows.forEach(r=>{
-        if(!r.emp && r.shift==0 && r.val==0) return;
-        monthCashTotal+=r.shift;
-        if(r.cat){
-          let k=r.cat.trim();
-          totalCatActual[k]=(totalCatActual[k]||0)+r.val;
-        }
-        let safi=r.shift + r.diff - r.val;
-        rows+=`<tr>
-          <td onclick="goToDaily('${dateKey}')">${dateKey}</td>
-          <td>${r.emp||'-'}</td>
-          <td><span style="background:#eff6ff;padding:4px 8px;border-radius:8px;font-size:10px">${r.shift?r.shift.toLocaleString():'-'}</span></td>
-          <td style="${r.diff<0?'color:#dc2626':'color:#16a34a'}">${r.diff||0}</td>
-          <td><span style="font-size:8px;background:#f1f5f9;padding:2px 6px;border-radius:20px">${r.cat||''}</span> ${r.val?r.val.toLocaleString():'-'}</td>
-          <td>${r.sup||'-'}</td>
-          <td style="color:#7c3aed;font-size:10px">${instaSum?instaSum.toLocaleString(): '-'}</td>
-          <td style="color:#dc2626;font-size:10px">${vodaSum?vodaSum.toLocaleString(): '-'}</td>
-          <td class="safi" style="font-size:10px">${safi.toLocaleString()}</td>
-        </tr>`;
-      });
-    });
-
-    setTimeout(()=>{
-      if(document.getElementById('autoSalesKPI')) document.getElementById('autoSalesKPI').textContent=monthCashTotal.toLocaleString();
-      if(document.getElementById('autoProfitKPI')){
-        let cfg=JSON.parse(localStorage.getItem('profitConfigTotal')||'{"desired":10}');
-        document.getElementById('autoProfitKPI').textContent=(monthCashTotal*(cfg.desired||10)/100).toLocaleString();
-      }
-      let cats=getSupplierClassifications();
-      let totalCatSum=0;
-      cats.forEach(cat=>{
-        let sum=0;
-        Object.keys(totalCatActual).forEach(k=>{
-          if(k===cat || k.includes(cat) || cat.includes(k)) sum+=totalCatActual[k];
-        });
-        let el=document.querySelector(`[data-actual="${cat}"]`);
-        if(el){ el.textContent=sum?sum.toLocaleString():'0'; totalCatSum+=sum; }
-      });
-      let totalEl=document.querySelector('[data-actual="totalCat"]');
-      if(totalEl) totalEl.textContent=totalCatSum.toLocaleString();
-
-      document.querySelectorAll('[data-diff]').forEach(td=>{
-        let k=td.getAttribute('data-diff');
-        if(k==='totalCat'){
-          let ev=Array.from(document.querySelectorAll('[data-val]')).reduce((a,el)=>a+calcNumTotal(el.textContent),0);
-          let diff=totalCatSum-ev; td.textContent=(diff>0?'+':'')+diff.toLocaleString(); td.style.color=diff>0?'#dc2626':'#16a34a';
-        } else {
-          let valEl=document.querySelector(`[data-val="${k}"]`);
-          let actEl=document.querySelector(`[data-actual="${k}"]`);
-          if(valEl && actEl){
-            let ev=calcNumTotal(valEl.textContent); let av=calcNumTotal(actEl.textContent); let diff=av-ev;
-            td.textContent=(diff>0?'+':'')+diff.toLocaleString(); td.style.color=diff>0?'#dc2626':'#16a34a'; if(diff!==0) td.style.background=diff>0?'#fee2e2':'#dcfce7';
-          }
-        }
-      });
-      calcPreview();
-      let sumEl=document.getElementById('monthSummary');
-      if(sumEl) sumEl.textContent=`كاش: ${monthCashTotal.toLocaleString()} - انستا: ${totalInsta.toLocaleString()} - فودافون: ${totalVoda.toLocaleString()}`;
-    },150);
-
-    document.getElementById('totalTableCard').innerHTML=`<div class="glass" style="padding:10px"><div style="display:flex;justify-content:space-between;font-size:10px"><b>📅 ${activeMonthTab?monthNames[months[activeMonthTab].monthNum]+' '+months[activeMonthTab].year:''} - كاش: ${monthCashTotal.toLocaleString()}</b></div><div style="overflow:auto;max-height:70vh;margin-top:8px;border-radius:10px"><table><thead><tr><th>التاريخ</th><th>الموظف</th><th>الشيفت كاش</th><th>العجز</th><th>المورد [التصنيف]</th><th>اسم مورد</th><th>انستا</th><th>فودافون</th><th>الصافي</th></tr></thead><tbody>${rows||'<tr><td colspan=9>مفيش بيانات</td></tr>'}</tbody></table></div></div>`;
-  }catch(e){ console.error(e); document.getElementById('totalTableCard').innerHTML='Error: '+e.message; }
+    document.getElementById('budgetCalc').innerHTML =
+      '<div class="budget-grid">' +
+      '<div class="b-card" style="border-color:#86efac" onclick="showDetail(\'profit\')"><div class="b-top"><span>💰 صافي الربح</span><span style="color:#14532d">' + p + '%</span></div><div class="b-val">' + profitAmt.toLocaleString() + ' ج</div><div style="font-size:9px;color:#64748b">اضغط للتفصيل</div><div class="prog"><i style="width:' + p + '%;background:#22c55e"></i></div></div>' +
+      '<div class="b-card" style="' + (purDrug > dAmt ? 'border-color:#fca5a5;background:#fef2f2' : '') + '" onclick="showDetail(\'drug\')"><div class="b-top"><span>💊 دواء</span><span>' + fD.toFixed(1) + '% • ' + dAmt.toLocaleString() + ' ج</span></div><div class="b-val" style="color:' + (purDrug > dAmt ? '#ef4444' : '#1e40af') + '">' + purDrug.toLocaleString() + ' ج ' + (purDrug <= dAmt ? '✅' : '❌') + '</div><div class="prog"><i style="width:' + Math.min(100, purDrug / (dAmt || 1) * 100) + '%;background:' + (purDrug <= dAmt ? '#3b82f6' : '#ef4444') + '"></i></div><div style="font-size:9px;display:flex;justify-content:space-between;color:#64748b"><span>فعلي ' + (purDrug / totalSales * 100).toFixed(1) + '%</span><span>فاضل ' + (dAmt - purDrug).toLocaleString() + ' ج</span></div></div>' +
+      '<div class="b-card" style="' + (purCosm > cAmt ? 'border-color:#fca5a5;background:#fef2f2' : '') + '" onclick="showDetail(\'cosm\')"><div class="b-top"><span>💖 كوزمتكس</span><span>' + fC.toFixed(1) + '% • ' + cAmt.toLocaleString() + ' ج</span></div><div class="b-val" style="color:' + (purCosm > cAmt ? '#ef4444' : '#be185d') + '">' + purCosm.toLocaleString() + ' ج ' + (purCosm <= cAmt ? '✅' : '❌') + '</div><div class="prog"><i style="width:' + Math.min(100, purCosm / (cAmt || 1) * 100) + '%;background:' + (purCosm <= cAmt ? '#ec4899' : '#ef4444') + '"></i></div><div style="font-size:9px;color:#64748b">فعلي ' + (purCosm / totalSales * 100).toFixed(1) + '%</div></div>' +
+      '<div class="b-card" style="' + (purExp > eAmt ? 'border-color:#fca5a5;background:#fef2f2' : '') + '" onclick="showDetail(\'exp\')"><div class="b-top"><span>💸 مصروفات</span><span>' + fE.toFixed(1) + '% • ' + eAmt.toLocaleString() + ' ج</span></div><div class="b-val">' + purExp.toLocaleString() + ' ج ' + (purExp <= eAmt ? '✅' : '❌') + '</div><div class="prog"><i style="width:' + Math.min(100, purExp / (eAmt || 1) * 100) + '%;background:' + (purExp <= eAmt ? '#f59e0b' : '#ef4444') + '"></i></div><div style="font-size:9px;color:#64748b">فعلي ' + (purExp / totalSales * 100).toFixed(1) + '%</div></div>' +
+      '</div>';
+    document.getElementById('kpiArea').innerHTML = '<div class="glass" style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-color:#fcd34d;text-align:center;font-weight:800;font-size:11px">📊 المبيعات ' + totalSales.toLocaleString() + ' ج • المصروف ' + (purDrug + purCosm + purExp).toLocaleString() + ' ج • الصافي ' + sumSafi.toLocaleString() + ' ج • دوس على أي خانة فوق عشان تشوف التفاصيل</div>';
+    let alerts = []; if (purDrug > dAmt) alerts.push('<div class="glass" style="background:#fef2f2;border-color:#fecaca;color:#991b1b">🔴 تجاوز دواء ' + (purDrug - dAmt).toLocaleString() + ' ج</div>'); if (purCosm > cAmt) alerts.push('<div class="glass" style="background:#fdf2f8;border-color:#fbcfe8;color:#831843">🔴 تجاوز كوزمتكس ' + (purCosm - cAmt).toLocaleString() + ' ج</div>'); if (purExp > eAmt) alerts.push('<div class="glass" style="background:#fff7ed;border-color:#fed7aa;color:#7c2d12">🔴 تجاوز مصروفات ' + (purExp - eAmt).toLocaleString() + ' ج</div>'); if (alerts.length === 0) alerts.push('<div class="glass" style="background:#f0fdf4;border-color:#86efac;color:#14532d;text-align:center">✅ كله تمام</div>');
+    document.getElementById('alertArea').innerHTML = alerts.join('');
+    let supRows = ''; Object.keys(purDetail).sort(function (a, b) { return purDetail[b].val - purDetail[a].val; }).forEach(function (name) { let d = purDetail[name]; let badge = d.type === 'مخزن ادوية' ? '<span class="badge" style="background:#dbeafe;color:#1e40af">💊 مخزن</span>' : d.type === 'كوزمتكس' ? '<span class="badge" style="background:#fce7f3;color:#be185d">💖 كوزمتكس</span>' : '<span class="badge" style="background:#ffedd5;color:#9a3412">💸 مصروف</span>'; supRows += '<tr><td class="r">' + name + '</td><td>' + badge + '</td><td style="font-weight:800">' + d.val.toLocaleString() + '</td><td>' + (d.val / totalSales * 100).toFixed(1) + '%</td><td>' + d.count + '</td><td>' + (d.val <= (d.type === 'مخزن ادوية' ? dAmt : d.type === 'كوزمتكس' ? cAmt : eAmt) ? '🟢' : '🔴') + '</td></tr>'; });
+    document.getElementById('mainTables').innerHTML = '<div style="display:grid;grid-template-columns:1.2fr.8fr;gap:12px"><div class="glass"><b style="font-size:12px">🏢 الموردين</b><div style="max-height:360px;overflow:auto;margin-top:8px"><table><thead><tr><th>المورد</th><th>النوع</th><th>قيمة</th><th>%</th><th>مرات</th><th></th></tr></thead><tbody>' + supRows + '</tbody></table></div></div><div class="glass"><b style="font-size:12px">👨‍⚕️ الموظفين</b><div style="max-height:360px;overflow:auto;margin-top:8px"><table><thead><tr><th>الموظف</th><th>مبيعات</th><th>أيام</th><th>عجز</th></tr></thead><tbody>' + Object.keys(empSales).map(function (n) { return '<tr><td class="r">' + n + '</td><td>' + empSales[n].shift.toLocaleString() + '</td><td>' + Object.keys(empSales[n].days).length + '</td><td>' + empSales[n].diff.toLocaleString() + '</td></tr>'; }).join('') + '</tbody></table></div></div></div>';
+    document.getElementById('totalTableCard').innerHTML = '<div class="glass"><b style="font-size:12px">📅 تفصيل يومي</b><div style="overflow:auto;margin-top:8px"><table><thead><tr><th>تاريخ</th><th>شيفت</th><th>مورد</th><th>مصروف</th><th>انستا</th><th>فودا</th><th>صافي</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr style="background:#0f172a;color:#fff;font-weight:900"><td>الإجمالي</td><td>' + sumShift.toLocaleString() + '</td><td>' + sumMawrid.toLocaleString() + '</td><td>' + sumMasrof.toLocaleString() + '</td><td>' + sumInsta.toLocaleString() + '</td><td>' + sumVoda.toLocaleString() + '</td><td>' + sumSafi.toLocaleString() + '</td></tr></tfoot></table></div></div>';
+  } catch (err) { console.error(err); }
 }
